@@ -37,24 +37,80 @@ def _flags2mode(flags):
 
     return m
 
+class TagfsState(fuse.Stat):
+    def __init__(self):
+        pass
+
 class TagFS(fuse.Fuse):
     
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
+        tdb = TagDB(None)
+        #tdb.loaddb(None)
+        lldir = "" # TODO: set low level directory
         
     def getattr(self, path):
-        return os.lstat("." + path)
+        st = TagfsStat()
+        try:
+            fs = tdb.getfiles(path)
+        except NoTagException as e:
+            return -errno.ENOENT
+
+        st.st_size = 4096L
+        st.st_nlinks = 2
+        st.st_ino = 0L
+        st.st_dev = 0L
+        st.st_gid = 0
+        st.st_atime = 0
+        st.st_mtime = 0
+        st.st_ctime = 0
+            
+        if isinstance(fs, list):
+            # directory
+            st.st_mode = stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR \
+                       stat.S_IRGRP | stat.S_IWGRP
+            
+        else:
+            # file
+            llst = os.lstat(lldir + fs.getfullname())
+            st = llst
+
+        return st
 
     def readlink(self, path):
-        return os.readlink("." + path)
+        raise OSError("readlink is not supported in TagFS")
+        #return os.readlink("." + path)
 
     def readdir(self, path, offset):
-        for e in os.listdir("." + path):
-            yield fuse.Direntry(e)
+        try:
+            fs = tdb.getfiles(path)
+        except NoTagException as e:
+            return -errno.ENOENT
+
+        if isinstance(fs, DBFile):
+            return -errno.ENOTDIR
+        
+        for f in fs:
+            if len(f) == 1:
+                yield fuse.Direntry(tdb.files[f[0]].fname)
+            else:
+                yield fuse.Direntry(f[1] + '/' + tdb.files[f[0]].fname)
 
     def unlink(self, path):
-        os.unlink("." + path)
+        try:
+            fs = tdb.getfiles(path)
+        except NoTagException:
+            return -errno.ENOENT
+        except NoUniqueTagException:
+            return -errno.EISDIR
 
+        if isinstance(fs, list):
+            return -errno.EISDIR
+        # unlink will remove the tags associated with the file, if there is
+        # not any tag left, remove the file, too.
+        # file name is also a tag, so no-more-tag means len(f.tags) == 1
+        #
+        
     def rmdir(self, path):
         os.rmdir("." + path)
 
@@ -150,7 +206,7 @@ Userspace tag based file system.
     server.multithreaded = False
 
     server.parser.add_option(mountopt="root", metavar="PATH", default='~/',
-                             help="mirror filesystem from under PATH [default: %default]")
+            help="mirror filesystem from under PATH [default: %default]")
     server.parse(values=server, errex=1)
 
     try:
