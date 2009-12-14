@@ -1,10 +1,13 @@
 # Tag db
 
+import stat
+
 class DBFile:
     def __init__(self, fuuid, fname):
         self.fuuid = fuuid
         self.fname = fname
         self.tags = set()
+        self.mode = stat.S_IFREG
 
     def getfullname(self):
         return self.fuuid + '_' + self.fname
@@ -44,7 +47,7 @@ class TagDB:
         wantfile = True
         if tset[-1] == '':
             wantfile = False
-            tset = [0:-1]
+            tset = tset[0:-1]
         
         fset = None
         for tag in tset:
@@ -90,7 +93,8 @@ class TagDB:
 
 
     def __is_unique(self, tags, fname):
-        """ Check if a file with fname as name and 'tags' as all its tags a unique            in the database. 
+        """ Check if a file with fname as name and 'tags' as all its tags a 
+        uniquein the database. 
         """
         try:
             flist = self.__query_by_tags(tags)
@@ -101,11 +105,11 @@ class TagDB:
 
         tset = tags.split('/')
         if tset[0] == '':
-            tset = [1:]
+            tset = tset[1:]
 
         if len(tset) > 0:
             if tset[-1] == '':
-                tset = [0:-1]
+                tset = tset[0:-1]
         
         tset.append(fname)
         for fid in flist:
