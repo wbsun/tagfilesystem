@@ -11,8 +11,9 @@ import os
 import errno
 import sys
 
-import TagDB
-import DBFile
+from TagDB import *
+from tagfsutils import *
+
 
 # many projects based on fuse-python use tricks for importing and version,
 # we may need that, too.
@@ -52,7 +53,9 @@ class TagFS(fuse.Fuse):
     def getattr(self, path):
         st = TagfsStat()
         try:
-            fs = tdb.getfiles(path)
+            fs = tdb.find_by_path(path, 'unsure')
+            if fs[0] == 'no such file' || fs[0] == 'files':
+                return -errno.ENOENT
         except NoTagException as e:
             return -errno.ENOENT
 
@@ -65,16 +68,23 @@ class TagFS(fuse.Fuse):
         st.st_mtime = 0
         st.st_ctime = 0
             
-        if isinstance(fs, list):
+        if fs[0] == 'dir':
             # directory
             st.st_mode = stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR \
                        stat.S_IRGRP | stat.S_IWGRP
             
         else:
             # file
-            llst = os.lstat(lldir + fs.getfullname())
-            st = llst
-
+            llst = os.lstat(lldir + tdb.files[fs[1]].getfullname())
+            st.st_size = llst.st_size
+            st.st_nlinks = llst.st_nlinks
+            st.st_ino = llst.st_ino
+            st.st_dev = llst.st_dev
+            st.st_gid = llst.st_gid
+            st.st_atime = llst.st_atime
+            st.st_mtime = llst.st_mtime
+            st.st_ctime = llst.st_ctime
+            st.st_mode = llst.st_mode
         return st
 
     def readlink(self, path):
@@ -83,14 +93,15 @@ class TagFS(fuse.Fuse):
 
     def readdir(self, path, offset):
         try:
-            fs = tdb.getfiles(path)
-        except NoTagException as e:
+            fs = tdb.find_by_path(path, 'dir')
+            if fs[0] == 'file':
+                return -errno.ENOTDIR
+            if fs[0] != 'dir':
+                return -errno.ENOENT
+        except NoTagException:
             return -errno.ENOENT
-
-        if isinstance(fs, DBFile):
-            return -errno.ENOTDIR
         
-        for f in fs:
+        for f in fs[1]:
             if len(f) == 1:
                 yield fuse.Direntry(tdb.files[f[0]].fname)
             else:
@@ -98,21 +109,32 @@ class TagFS(fuse.Fuse):
 
     def unlink(self, path):
         try:
-            fs = tdb.getfiles(path)
+            fs = tdb.find_by_path(path, 'file')
+            if fs[0] != 'file':
+                return -errno.ENOENT
+            # (TODO: add rm_file_tags_by_path(path, uuid) to TagDB)
+            tdb.rm_file_tags_by_path(path, fs[1][0])
         except NoTagException:
             return -errno.ENOENT
         except NoUniqueTagException:
             return -errno.EISDIR
-
-        if isinstance(fs, list):
-            return -errno.EISDIR
+        
         # unlink will remove the tags associated with the file, if there is
         # not any tag left, remove the file, too.
         # file name is also a tag, so no-more-tag means len(f.tags) == 1
         #
         
     def rmdir(self, path):
-        os.rmdir("." + path)
+        try:
+            fs = tdb.find_by_path(path, 'dir')
+            if len(fs[1]) != 0:
+                return -errno.NOTEMPTY
+            else:
+                tdb.rm_tags_by_path(path)
+        except NoTagException:
+            return -errno.ENOENT
+        except NoUniqueTagException:
+            pass # but there is problem! (TODO: figure out a solution)
 
     def symlink(self, path, path1):
         os.symlink(path, "." + path1)
@@ -150,6 +172,10 @@ class TagFS(fuse.Fuse):
     class TagFSFile(object):
 
         def __init__(self, path, flags, *mode):
+            try:
+                f = tdb.find_by_path(path, 'file')
+            except NoTagException:
+                
             self.file = os.fdopen(os.open("." + path, flags, *mode), \
                                   flag2mode(flags))
             self.fd = self.file.fileno()

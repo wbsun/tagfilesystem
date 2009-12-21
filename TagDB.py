@@ -162,7 +162,7 @@ class TagDB:
         if tset[0] == '':
             tset = tset[1:]
         if tset[-1] == '':
-            tset = test[0:-1]
+            tset = tset[0:-1]
         
         if target == 'dir' || (path[-1] == '/' && target == 'unsure'):
             return ('dir', self.__query_dir(tset))
