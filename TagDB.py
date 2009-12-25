@@ -26,6 +26,11 @@ class NoUniqueTagException(Exception):
 class NameConflictionException(Exception):
     def __init__(self, msg):
         self.msg = msg
+        
+class NoFileException(Exception):
+    def __init__(self, msg, file):
+        self.msg = msg
+        self.file = file
 
 
 # for error logger:
@@ -180,7 +185,7 @@ class TagDB:
        
                 frs = self.__query_file(tset)
                 if len(frs) == 0:
-                    return ('no such file', )
+                    raise NoFileException('No such file', path)
                 elif len(frs) == 1:
                     return ('file', frs[0])
                 else:
