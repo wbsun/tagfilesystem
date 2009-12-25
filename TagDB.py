@@ -323,9 +323,4 @@ class TagDB:
         for t in tset:
             if t not in self.tags:
                 self.tags[t] = {}
-        
-        
 
-
-
-        
