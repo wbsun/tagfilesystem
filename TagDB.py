@@ -27,18 +27,19 @@ class NameConflictionException(Exception):
         self.msg = msg
 
 
-#
+# for error logger:
 # print traceback
 # import traceback
 # traceback.print_tb()
 
 class TagDB:
     
-    def __init__(self, dbfile):
+    def __init__(self, dbfile = None):
         """Load tag db from a file"""
-        self.tags = {}
-        self.files = {}
-        pass
+        self.tags = {} # tags is {tag=>{fuuid=>DBFile}}
+        self.files = {} # files is {fuuid=>DBFile}
+        if dbfile != None:
+            self.load_db(dbfile)
 
     def __make_unique(self, flist):
         """
@@ -74,7 +75,7 @@ class TagDB:
     def __query_by_tags(self, qtags):
         fset = None
         for tag in qtags:
-            if tag in in self.tags:
+            if tag in self.tags:
                 raise NoTagException('Can not find tags ' + tag, tag)
             if fset == None:
                 fset = set(self.tags[tag].keys())
@@ -111,7 +112,7 @@ class TagDB:
             frs = self.__query_file(ftags)
         except NoTagException:
             pass
-        except NoUniqueTagExcaption:
+        except NoUniqueTagException:
             pass
         if len(frs) == 0:
             frs = None        
@@ -120,14 +121,14 @@ class TagDB:
         drs = None
         notagex = None
         try:
-            drs = self.__query_dir(qtags)
+            ds = self.__query_dir(qtags)
         except NoTagException as e:
             # this must be re-raised!
             notagex = e
-        except NoUniqueTagExcaption:
+        except NoUniqueTagException:
             pass
 
-        if frs == None && drs == None:
+        if frs == None and drs == None:
             raise notagex
         elif drs == None:
             if len(frs) > 1:
@@ -164,7 +165,7 @@ class TagDB:
         if tset[-1] == '':
             tset = tset[0:-1]
         
-        if target == 'dir' || (path[-1] == '/' && target == 'unsure'):
+        if target == 'dir' or (path[-1] == '/' and target == 'unsure'):
             return ('dir', self.__query_dir(tset))
         
         elif target == 'file':
@@ -173,10 +174,10 @@ class TagDB:
                                 + 'given: ' + path)
             else:
                 # use / as tag for files without tag
-                if len(fset) == 1:
-                    fset = ['/'] + fset
+                if len(tset) == 1:
+                    tset = ['/'] + tset
        
-                frs = self.__query_file(fset)
+                frs = self.__query_file(tset)
                 if len(frs) == 0:
                     return ('no such file', )
                 elif len(frs) == 1:
@@ -185,7 +186,7 @@ class TagDB:
                     return ('files', frs)
             
         elif target == 'unsure':
-            return self.__query_both(fset)
+            return self.__query_both(tset)
         else:
             raise Exception('Invalid parameter: target = %s'%target)
 
@@ -207,9 +208,7 @@ class TagDB:
 
     def check_unique_file(self, tags, fname):
         """
-        Check if a file with fname as name and 'tags' as all its tags a 
-        unique in the database. 
-        """
+        Check if a file with fname as name and 'tags' as all its tags  """
         fpath = ''
         for tag in tags:
             fpath += tag
@@ -217,41 +216,55 @@ class TagDB:
                 fpath += '/'
         fpath += fname
         return self.check_unique_filepath(fpath)
+    
+    def add_file(self, fuuid, fname, ftags):
+        if self.check_unique_file(ftags, fname):
+            f = DBFile()
+            f.fuuid = fuuid
+            f.fname = fname
+            f.tags = ftags[:]
+                        
+            self.files[fuuid] = f
+            if len(ftags) == 0:
+                ftags += ['/']
+            
+            for t in ftags:
+                if t in self.tags:
+                    self.tags[t][fuuid] = f
+                else:
+                    self.tags[t] = {fuuid:f}
+        else:
+            raise NoUniqueTagException('File with name '+fname+' and tags: '\
+                                       +ftags+' is not unique.')
 
-    def getftags(self, fuuid):
-        """Get tag set by file UUID"""
-        pass
-
-    def getsubtags(self, ptags):
-        """Get tags that also associated with files queried by 'ptags'"""
-        pass
-
-    def getfiles(self, tags):
-        """Do query with 'tags' and return the file set"""
-        pass
-
-    def addftags(self, fuuid, tags):
-        """Attach tags to file"""
-        pass
-
-    def addtags(self, tags):
-        """Add tags only"""
-        pass
-
-    def rmftags(self, fuuid, tags):
-        """Remove tags from a file"""
-        pass
-
-    def addfile(self, fuuid, fname):
-        """Add a new file to db with fuuid and fname as name"""
-        pass
 
     def rmfile(self, fuuid):
         """Remove a file from db"""
-        pass
+        if fuuid in self.files: 
+            f = self.files[fuuid]
+            del self.files[fuuid]
+            for t in f.tags:
+                del self.tags[t][fuuid]
+            if fuuid in self.tags['/']:
+                del self.tags['/'][fuuid]
+        else:
+            raise Exception('No such file: '+fuuid)
 
     def load_db(self, dbfile):
-        pass
+        """load metadata from dbfile"""
+        import pickle
+        dbf = open(dbfile, 'rb')
+        self.files = pickle.load(dbf)
+        self.tags = pickle.load(dbf)
+        dbf.close()
+    
+    def store_db(self, dbfile):
+        import pickle
+        dbf = open(dbfile, 'wb')
+        pickle.dump(self.files, dbf)
+        pickle.dump(self.tags, dbf)
+        dbf.close()
+
 
 
         
