@@ -1,6 +1,7 @@
 # Tag db
 
 import stat
+import tagfsutils
 
 class DBFile:
     def __init__(self, fuuid, fname):
@@ -75,7 +76,7 @@ class TagDB:
     def __query_by_tags(self, qtags):
         fset = None
         for tag in qtags:
-            if tag in self.tags:
+            if tag not in self.tags:
                 raise NoTagException('Can not find tags ' + tag, tag)
             if fset == None:
                 fset = set(self.tags[tag].keys())
@@ -121,7 +122,7 @@ class TagDB:
         drs = None
         notagex = None
         try:
-            ds = self.__query_dir(qtags)
+            drs = self.__query_dir(qtags)
         except NoTagException as e:
             # this must be re-raised!
             notagex = e
@@ -188,12 +189,12 @@ class TagDB:
         elif target == 'unsure':
             return self.__query_both(tset)
         else:
-            raise Exception('Invalid parameter: target = %s'%target)
+            raise Exception('Invalid parameter: target = '+target)
 
     def check_unique_filepath(self, filepath):
         """
         Check if a file path is unique. The filepath includes a filename
-        and directory struture.
+        and directory structure.
         """
         try:
             self.find_by_path(filepath, 'unsure')
@@ -235,10 +236,23 @@ class TagDB:
                     self.tags[t] = {fuuid:f}
         else:
             raise NoUniqueTagException('File with name '+fname+' and tags: '\
-                                       +ftags+' is not unique.')
+                                       +str(ftags)+' is not unique.')
 
-
-    def rmfile(self, fuuid):
+    def add_file_tags(self, fuuid, ftags):
+        f = self.files[fuuid]
+        if self.check_unique_file(ftags+f.tags, f.fname):
+            f.tags += ftags
+            for t in ftags:
+                if t in self.tags:
+                    self.tags[t][fuuid] = f
+                else:
+                    self.tags[t] = {fuuid:f}
+        else:
+            raise NoUniqueTagException('File '+fuuid+' can not have tags: ' \
+                                       + str(ftags) + ', not unique.')
+            
+        
+    def rm_file(self, fuuid):
         """Remove a file from db"""
         if fuuid in self.files: 
             f = self.files[fuuid]
@@ -264,6 +278,40 @@ class TagDB:
         pickle.dump(self.files, dbf)
         pickle.dump(self.tags, dbf)
         dbf.close()
+
+    def __rm_ftags(self, fuuid, ftags):
+        f = self.files[fuuid]
+        for t in ftags:
+            if t != '/':
+                f.tags.remove(t)
+            del self.tags[t][fuuid]
+    
+    def __undo_rm_ftags(self, fuuid, ftags):
+        f = self.files[fuuid]
+        for t in ftags:
+            if t != '/':
+                f.tags.append(t)
+            self.tags[t][fuuid] = f
+        
+    def rm_file_tags_by_path(self, fuuid, path):
+        tset = tagfsutils.path2tags(path, 'dir')[1]
+        self.__rm_ftags(fuuid, tset)
+        f = self.files[fuuid]
+        if not self.check_unique_file(f.tags, f.fname):
+            self.__undo_rm_ftags(fuuid, tset)
+            raise NoUniqueTagException(
+                    'Can not make file unique if remove tags. ' \
+                    + 'file: ' + fuuid + ' tags: ' + str(tset))
+        if path != '/':
+            if len(f.tags) == 0:
+                self.tags['/'][fuuid] = f
+        
+    def rm_tags_by_path(self, path):
+        tset = tagfsutils.path2tags(path, 'dir')[1]
+        for t in tset:
+            if len(self.tags[t]) == 0:
+                del self.tags[t]
+        
 
 
 
