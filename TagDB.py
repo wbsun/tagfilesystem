@@ -316,6 +316,14 @@ class TagDB:
         for t in tset:
             if len(self.tags[t]) == 0:
                 del self.tags[t]
+    
+    def add_tags_by_path(self, path):
+        tset = tagfsutils.path2tags(path, 'dir')[1]
+        # TODO: check unique for tags!!! IMPORTANT TODO
+        for t in tset:
+            if t not in self.tags:
+                self.tags[t] = {}
+        
         
 
 
