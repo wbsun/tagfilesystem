@@ -94,8 +94,8 @@ class TagFS(fuse.Fuse):
         return st
 
     def readlink(self, path):
-        raise OSError("readlink is not supported in TagFS")
-        #return os.readlink("." + path)
+        # link is not supported
+        return -errno.ENOSYS
 
     def readdir(self, path, offset):
         try:
@@ -123,7 +123,7 @@ class TagFS(fuse.Fuse):
         except TagDB.NoTagException:
             return -errno.ENOENT
         except TagDB.NoUniqueTagException:
-            return -errno.EISDIR
+            return -errno.EISDIR # -errno.ENOENT may be better
         
         # unlink will remove the tags associated with the file, if there is
         # not any tag left, remove the file, too.
@@ -134,48 +134,103 @@ class TagFS(fuse.Fuse):
         try:
             fs = self.tdb.find_by_path(path, 'dir')
             if len(fs[1]) != 0:
-                return -1 #-errno.NOTEMPTY # not empty
+                return -errno.ENOTEMPTY # not empty
             else:
                 self.tdb.rm_tags_by_path(path)
         except TagDB.NoTagException:
             return -errno.ENOENT
         except TagDB.NoUniqueTagException:
-            pass # but there is problem! (TODO: figure out a solution)
+            logging.error('Can not remove dir because of name confliction')
+            return -errno.EFAULT # but there is problem! (TODO: figure out a solution)
 
     def symlink(self, path, path1):
-        os.symlink(path, "." + path1)
+        # I decide not support symlink!
+        return -errno.ENOSYS
 
     def rename(self, path, path1):
         os.rename("." + path, "." + path1)
 
     def link(self, path, path1):
-        os.link("." + path, "." + path1)
+        # I decide not support link!
+        return -errno.ENOSYS
 
     def chmod(self, path, mode):
-        os.chmod("." + path, mode)
+        try:
+            frs = self.tdb.find_by_path(path, 'unsure')
+            if frs[0] == 'files':
+                return -errno.ENOENT
+            elif frs[0] == 'dir':
+                logging.info('chmod on dir makes no sense')
+                return 0
+            elif frs[0] == 'file':
+                os.chmod(self.lldir+self.tdb.files[frs[1][0]].getfullname(), mode)
+        except:
+            return -errno.ENOENT
 
     def chown(self, path, user, group):
-        os.chown("." + path, user, group)
+        try:
+            frs = self.tdb.find_by_path(path, 'unsure')
+            if frs[0] == 'files':
+                return -errno.ENOENT
+            elif frs[0] == 'dir':
+                logging.info('chown on dir makes no sense')
+                return 0
+            elif frs[0] == 'file':
+                os.chown(self.lldir+self.tdb.files[frs[1][0]].getfullname(), user, group)
+        except:
+            return -errno.ENOENT
 
     def truncate(self, path, len):
-        f = open("." + path, "a")
-        f.truncate(len)
-        f.close()
+        try:
+            frs = self.tdb.find_by_path(path, 'unsure')
+            if frs[0] == 'files':
+                return -errno.ENOENT
+            elif frs[0] == 'dir':
+                logging.info('truncate on dir')
+                return -errno.EISDIR
+            elif frs[0] == 'file':
+                f = open(self.lldir+self.tdb.files[frs[1][0]].getfullname(), 'a')
+                f.truncate(len)
+                f.close()
+        except:
+            return -errno.ENOENT
 
     def mknod(self, path, mode, dev):
-        os.mknod("." + path, mode, dev)
+        # open/create do not depend on this function, so 
+        # here we make it unsupported.
+        # os.mknod("." + path, mode, dev)
+        return -errno.ENOSYS
 
     def mkdir(self, path, mode):
-        os.mkdir("." + path, mode)
+        self.tdb.add_tags_by_path(path)
 
     def utime(self, path, times):
-        os.utime("." + path, times)
+        try:
+            frs = self.tdb.find_by_path(path, 'unsure')
+            if frs[0] == 'files':
+                return -errno.ENOENT
+            elif frs[0] == 'dir':
+                logging.info('utime on dir makes no sense')
+                return 0
+            elif frs[0] == 'file':
+                return os.utime(self.lldir+self.tdb.files[frs[1][0]].getfullname()
+                                 ,times)
+        except:
+            return -errno.ENOENT
 
     def access(self, path, mode):
         try:
-            f = 
-        if not os.access("." + path, mode):
-            return -errno.EACCES
+            frs = self.tdb.find_by_path(path, 'unsure')
+            if frs[0] == 'files':
+                return -errno.ENOENT
+            elif frs[0] == 'dir':
+                return 0
+            elif frs[0] == 'file':
+                if not os.access(self.lldir+self.tdb.files[frs[1][0]].getfullname()
+                                 ,mode):
+                    return -errno.EACCES
+        except:
+            return -errno.ENOENT
 
     class TagFSFile(object):
 
@@ -197,7 +252,7 @@ class TagFS(fuse.Fuse):
                 else:
                     self.filetype = 'file'
                     self.file = os.fdopen(os.open(
-                                   self.tagfs.lldir+"." + self.tagfs.files[f[1][0]].getfullname(),
+                                   self.tagfs.lldir + self.tagfs.files[f[1][0]].getfullname(),
                                    flags, *mode), _flags2mode(flags))
                     self.fd = self.file.fileno()
             except (TagDB.NoTagException, TagDB.NameConflictionException):
@@ -226,7 +281,7 @@ class TagFS(fuse.Fuse):
                     try:
                         self.tagfs.add_file(fuuid, fname, ftags)
                         self.file = os.fdopen(os.open(
-                                   self.tagfs.lldir+"." + self.tagfs.files[fuuid].getfullname(),
+                                   self.tagfs.lldir + self.tagfs.files[fuuid].getfullname(),
                                    flags, *mode), _flags2mode(flags))
                         self.fd = self.file.fileno()
                     except:
