@@ -42,7 +42,7 @@ class TagDB:
     
     def __init__(self, dbfile = None):
         """Load tag db from a file"""
-        self.tags = {} # tags is {tag=>{fuuid=>DBFile}}
+        self.tags = {'/':{}} # tags is {tag=>{fuuid=>DBFile}}
         self.files = {} # files is {fuuid=>DBFile}
         if dbfile != None:
             self.load_db(dbfile)
