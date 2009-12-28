@@ -62,8 +62,10 @@ class TagFS(fuse.Fuse):
         try:
             fs = self.tdb.find_by_path(path, 'unsure')
             if fs[0] == 'no such file' or fs[0] == 'files':
+                logging.error('getattr: no ent '+path)
                 return -errno.ENOENT
         except TagDB.NoTagException:
+            logging.error('getattr: no ent '+path)
             return -errno.ENOENT
 
         st.st_size = 4096L
@@ -102,11 +104,14 @@ class TagFS(fuse.Fuse):
         try:
             fs = self.tdb.find_by_path(path, 'dir')
             if fs[0] == 'file':
-                return -errno.ENOTDIR
+                yield -errno.ENOTDIR
+                return
             if fs[0] != 'dir':
-                return -errno.ENOENT
+                yield -errno.ENOENT
+                return
         except TagDB.NoTagException:
-            return -errno.ENOENT
+            yield -errno.ENOENT
+            return
         
         for f in fs[1]:
             if len(f) == 1:
@@ -259,6 +264,7 @@ class TagFS(fuse.Fuse):
         if os.path.exists(self.lldir+'.tagfs_db.meta'):
             self.tdb.load_db(self.lldir+'.tagfs_db.meta')
         os.chdir(self.root)
+        print self.root
 
     class TagFSFile(object):
 
@@ -376,6 +382,7 @@ class TagFS(fuse.Fuse):
     def main(self, *a, **kw):
 
         self.file_class = self.TagFSFile
+        self.fsinit()
 
         return Fuse.main(self, *a, **kw)
 
@@ -398,6 +405,7 @@ def main():
     try:
         if server.fuse_args.mount_expected():
             os.chdir(server.root)
+            print server.root
     except OSError:
         print >> sys.stderr, "can't enter root of underlying filesystem"
         sys.exit(1)
