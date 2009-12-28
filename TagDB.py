@@ -16,6 +16,9 @@ class DBFile:
     def __str__(self):
         return 'DBFile(fuuid='+self.fuuid+', fname='+ \
                 self.fname+', tags='+str(self.tags)+')'
+    
+    def __repr__(self):
+        return self.__str__()
 
 class NoTagException(Exception):
     def __init__(self, msg, tags):
