@@ -164,7 +164,27 @@ class TagFS(fuse.Fuse):
         logging.info('rename: '+path)
         # not support yet
         # self.tdb.store_db(self.lldir+'.tagfs_db.meta')
-        return -errno.ENOSYS
+        try:
+            frs = self.tdb.find_by_path(path, 'file') # 'unsure'
+            if frs[0] == 'files':
+                logging.error('get files: '+path)
+                return -errno.ENOENT
+            elif frs[0] == 'dir':
+                logging.error('rename on dir is not supported yet: '+path+' to '+path1)
+                return -errno.ENOSYS
+            elif frs[0] == 'file':
+                logging.info('rename from ' + path + ' to ' + path1)
+                tags0 = tagfsutils.path2tags(path, 'file')[1]
+                tags1 = tagfsutils.path2tags(path, 'file')[1]
+                f = self.tdb.files[frs[1][0]]
+                if tags1[-1] != tags0[-1]:
+                    os.rename(self.lldir+f.getfullname(), self.lldir+f.fuuid+'_'+tags1[-1])
+                    f.fname = tags1[-1]
+                rmtags = list(set(tags0) - set(tags1))
+                addtags = list(set(tags1) - set(tags0))
+                self.tdb.change_file_tags(f.fuuid, rmtags, addtags)
+        except:
+            return -errno.ENOENT
 
     def link(self, path, path1):
         logging.info('link: '+path)
@@ -279,7 +299,6 @@ class TagFS(fuse.Fuse):
         if os.path.exists(self.lldir+'.tagfs_db.meta'):
             self.tdb.load_db(self.lldir+'.tagfs_db.meta')
         os.chdir(self.root)
-        print self.root
 
     class TagFSFile(object):
 
@@ -290,6 +309,7 @@ class TagFS(fuse.Fuse):
             self.flags = flags
             self.mode = mode
             self.direct_io = True
+            self.keep_cache = False
             try:
                 # can a directory be opened? Yes, but when reading, errors are there.
                 f = self.tagfs.tdb.find_by_path(path, 'unsure')
@@ -309,7 +329,7 @@ class TagFS(fuse.Fuse):
             except (TagDB.NoTagException, TagDB.NameConflictionException):
                 e = OSError()
                 e.errno = errno.ENOENT
-                logging.error('open: notag: '+path+' flags: '+str(flags))
+                logging.error('open: no tag: '+path+' flags: '+str(flags))
                 raise e
             except TagDB.NoUniqueTagException:
                 # System error: no unique id for path/file
@@ -336,7 +356,8 @@ class TagFS(fuse.Fuse):
                         self.file = os.fdopen(os.open(
                                    self.tagfs.lldir + self.tagfs.tdb.files[fuuid].getfullname(),
                                    flags, *mode), _flags2mode(flags))
-                        self.fd = self.file.fileno()                        
+                        self.fd = self.file.fileno()    
+                        self.filetype = 'file'                    
                     except TagDB.NoUniqueTagException as ne:
                         logging.error('Want create a file that conflicts with tags'+ne.msg)
                         e = OSError()
@@ -407,10 +428,7 @@ class TagFS(fuse.Fuse):
         return Fuse.main(self, *a, **kw)
 
 def main():
-    usage = """
-    Userspace tag based file system.
-
-    """ + Fuse.fusage
+    usage = 'Userspace tag based file system.' + Fuse.fusage
 
     server = TagFS(version="%prog " + fuse.__version__,
                  usage=usage,
@@ -425,7 +443,6 @@ def main():
     try:
         if server.fuse_args.mount_expected():
             os.chdir(server.root)
-            print server.root
     except OSError:
         print >> sys.stderr, "can't enter root of underlying filesystem"
         sys.exit(1)
