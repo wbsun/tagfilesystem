@@ -4,11 +4,11 @@ import stat
 import tagfsutils
 
 class DBFile:
-    def __init__(self, fuuid, fname):
+    def __init__(self, fuuid, fname, ftags):
         self.fuuid = fuuid
         self.fname = fname
-        self.tags = set()
-        self.mode = stat.S_IFREG
+        self.tags = ftags
+        self.mode = stat.S_IFREG|0777
 
     def getfullname(self):
         return self.fuuid + '_' + self.fname
@@ -40,12 +40,13 @@ class NoFileException(Exception):
 
 class TagDB:
     
-    def __init__(self, dbfile = None):
+    def __init__(self, logger, dbfile = None):
         """Load tag db from a file"""
         self.tags = {'/':{}} # tags is {tag=>{fuuid=>DBFile}}
         self.files = {} # files is {fuuid=>DBFile}
         if dbfile != None:
             self.load_db(dbfile)
+        self.logger = logger
 
     def __make_unique(self, flist):
         """
@@ -121,7 +122,7 @@ class TagDB:
         except NoUniqueTagException:
             pass
         if len(frs) == 0:
-            frs = None        
+            frs = []        
 
         # query as a directory:
         drs = None
@@ -134,16 +135,18 @@ class TagDB:
         except NoUniqueTagException:
             pass
 
-        if frs == None and drs == None:
+        if frs == None and drs == None:            
             raise notagex
         elif drs == None:
             if len(frs) > 1:
                 # This make it possible that a command may
                 # want to get multiple files with some tags.
                 return ('files', frs)
-            else:
+            elif len(frs) == 1:
                 return ('file', frs[0])
-        elif frs == None:
+            else:
+                return ('no file',) 
+        elif frs == None or frs == []:
             return ('dir', drs)
         else:
             # this is really a terrible situation!
@@ -170,6 +173,8 @@ class TagDB:
             tset = tset[1:]
         if tset[-1] == '':
             tset = tset[0:-1]
+        if len(tset) == 0:
+            tset = ['/']
         
         if target == 'dir' or (path[-1] == '/' and target == 'unsure'):
             return ('dir', self.__query_dir(tset))
@@ -192,7 +197,10 @@ class TagDB:
                     return ('files', frs)
             
         elif target == 'unsure':
-            return self.__query_both(tset)
+            rs = self.__query_both(tset)
+            if rs[0] == 'no file':
+                raise NoFileException('No such file', path)
+            return rs
         else:
             raise Exception('Invalid parameter: target = '+target)
 
@@ -202,21 +210,25 @@ class TagDB:
         and directory structure.
         """
         try:
-            self.find_by_path(filepath, 'unsure')
+            rs = self.find_by_path(filepath, 'unsure')
+            self.logger.info('check unique: '+str(rs)+' '+filepath)
+            return False
         except NoTagException:
             return True
         except NoUniqueTagException:
             return False
         except NameConflictionException:
             return False
-
-        return False
+        except NoFileException:
+            return True
 
     def check_unique_file(self, tags, fname):
         """
         Check if a file with fname as name and 'tags' as all its tags  """
-        fpath = ''
+        fpath = '/'
         for tag in tags:
+            if tag == '/':
+                continue
             fpath += tag
             if fpath[-1] != '/':
                 fpath += '/'
@@ -225,11 +237,7 @@ class TagDB:
     
     def add_file(self, fuuid, fname, ftags):
         if self.check_unique_file(ftags, fname):
-            f = DBFile()
-            f.fuuid = fuuid
-            f.fname = fname
-            f.tags = ftags[:]
-                        
+            f = DBFile(fuuid, fname, ftags[:])                        
             self.files[fuuid] = f
             if len(ftags) == 0:
                 ftags += ['/']
@@ -246,9 +254,9 @@ class TagDB:
     def add_file_tags(self, fuuid, ftags):
         f = self.files[fuuid]
         if self.check_unique_file(ftags+f.tags, f.fname):
-            if ftags[0] != '/':
-                f.tags += ftags
             for t in ftags:
+                if t != '/' and t not in f.tags:
+                    f.tags.append(t)
                 if t in self.tags:
                     self.tags[t][fuuid] = f
                 else:
@@ -295,7 +303,7 @@ class TagDB:
     def __undo_rm_ftags(self, fuuid, ftags):
         f = self.files[fuuid]
         for t in ftags:
-            if t != '/':
+            if t != '/' and t not in f.tags:
                 f.tags.append(t)
             self.tags[t][fuuid] = f
         
