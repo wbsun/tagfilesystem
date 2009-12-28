@@ -51,42 +51,43 @@ class TagFS(fuse.Fuse):
     def __init__(self, *args, **kw):
         global g_cur_tagfs
         Fuse.__init__(self, *args, **kw)
-        self.tdb = TagDB.TagDB()
+        self.tdb = TagDB.TagDB(logging)
         #tdb.loaddb(None)
         self.lldir = "." # TODO: set low level directory
         TagFS.cur_tagfs = self
         self.root = "."
         
     def getattr(self, path):
+        logging.info('getattr: '+path)
         st = TagfsStat()
         try:
             fs = self.tdb.find_by_path(path, 'unsure')
             if fs[0] == 'no such file' or fs[0] == 'files':
                 logging.error('getattr: no ent '+path)
                 return -errno.ENOENT
-        except TagDB.NoTagException:
+        except (TagDB.NoTagException, TagDB.NoFileException):
             logging.error('getattr: no ent '+path)
             return -errno.ENOENT
 
         st.st_size = 4096L
-        st.st_nlinks = 2
+        st.st_nlink = 2
         st.st_ino = 0L
         st.st_dev = 0L
         st.st_gid = 0
         st.st_atime = 0
         st.st_mtime = 0
         st.st_ctime = 0
+        st.st_uid = 0
             
         if fs[0] == 'dir':
             # directory
-            st.st_mode = stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR \
-                       | stat.S_IRGRP | stat.S_IWGRP
+            st.st_mode = stat.S_IFDIR | 0777
             
         else:
             # file
             llst = os.lstat(self.lldir + self.tdb.files[fs[1][0]].getfullname())
             st.st_size = llst.st_size
-            st.st_nlinks = llst.st_nlinks
+            st.st_nlink = llst.st_nlink
             st.st_ino = llst.st_ino
             st.st_dev = llst.st_dev
             st.st_gid = llst.st_gid
@@ -94,13 +95,16 @@ class TagFS(fuse.Fuse):
             st.st_mtime = llst.st_mtime
             st.st_ctime = llst.st_ctime
             st.st_mode = llst.st_mode
+            st.st_uid = llst.st_uid
         return st
 
     def readlink(self, path):
         # link is not supported
+        logging.info('readlink: '+path)
         return -errno.ENOSYS
 
     def readdir(self, path, offset):
+        logging.info('readdir: '+path)
         try:
             fs = self.tdb.find_by_path(path, 'dir')
             if fs[0] == 'file':
@@ -120,6 +124,7 @@ class TagFS(fuse.Fuse):
                 yield fuse.Direntry(f[1] + '/' + self.tdb.files[f[0]].fname)
 
     def unlink(self, path):
+        logging.info('unlink: '+path)
         try:
             fs = self.tdb.find_by_path(path, 'file')
             if fs[0] != 'file':
@@ -136,6 +141,7 @@ class TagFS(fuse.Fuse):
         # not any tag left, remove the file, too.
         
     def rmdir(self, path):
+        logging.info('rmdir: '+path)
         try:
             fs = self.tdb.find_by_path(path, 'dir')
             if len(fs[1]) != 0:
@@ -150,19 +156,23 @@ class TagFS(fuse.Fuse):
             return -errno.EFAULT # but there is problem! (TODO: figure out a solution)
 
     def symlink(self, path, path1):
+        logging.info('symlink: '+path)
         # I decide not support symlink!
         return -errno.ENOSYS
 
     def rename(self, path, path1):
+        logging.info('rename: '+path)
         # not support yet
         # self.tdb.store_db(self.lldir+'.tagfs_db.meta')
         return -errno.ENOSYS
 
     def link(self, path, path1):
+        logging.info('link: '+path)
         # I decide not support link!
         return -errno.ENOSYS
 
     def chmod(self, path, mode):
+        logging.info('chmod: '+path)
         try:
             frs = self.tdb.find_by_path(path, 'unsure')
             if frs[0] == 'files':
@@ -176,6 +186,7 @@ class TagFS(fuse.Fuse):
             return -errno.ENOENT
 
     def chown(self, path, user, group):
+        logging.info('chown: '+path)
         try:
             frs = self.tdb.find_by_path(path, 'unsure')
             if frs[0] == 'files':
@@ -189,6 +200,7 @@ class TagFS(fuse.Fuse):
             return -errno.ENOENT
 
     def truncate(self, path, len):
+        logging.info('truncate: '+path)
         try:
             frs = self.tdb.find_by_path(path, 'unsure')
             if frs[0] == 'files':
@@ -204,7 +216,7 @@ class TagFS(fuse.Fuse):
             return -errno.ENOENT
 
     def mknod(self, path, mode, dev):
-        logging.info('Create new inode')
+        logging.info('Create new inode: '+path)
         ftags_rs = tagfsutils.path2tags(path, 'file')
         if ftags_rs[0] == 'file':
             logging.info('Want to create a file')
@@ -226,10 +238,12 @@ class TagFS(fuse.Fuse):
 
 
     def mkdir(self, path, mode):
+        logging.info('mkdir: '+path)
         self.tdb.add_tags_by_path(path)
         self.tdb.store_db(self.lldir+'.tagfs_db.meta')
 
     def utime(self, path, times):
+        logging.info('utime: '+path)
         try:
             frs = self.tdb.find_by_path(path, 'unsure')
             if frs[0] == 'files':
@@ -244,6 +258,7 @@ class TagFS(fuse.Fuse):
             return -errno.ENOENT
 
     def access(self, path, mode):
+        logging.info('access: '+path)
         try:
             frs = self.tdb.find_by_path(path, 'unsure')
             if frs[0] == 'files':
@@ -269,10 +284,12 @@ class TagFS(fuse.Fuse):
     class TagFSFile(object):
 
         def __init__(self, path, flags, *mode):
+            logging.info('open: '+path + ' flags: '+str(flags))
             self.tagfs = TagFS.cur_tagfs  
             self.path = path
             self.flags = flags
             self.mode = mode
+            self.direct_io = True
             try:
                 # can a directory be opened? Yes, but when reading, errors are there.
                 f = self.tagfs.tdb.find_by_path(path, 'unsure')
@@ -292,6 +309,7 @@ class TagFS(fuse.Fuse):
             except (TagDB.NoTagException, TagDB.NameConflictionException):
                 e = OSError()
                 e.errno = errno.ENOENT
+                logging.error('open: notag: '+path+' flags: '+str(flags))
                 raise e
             except TagDB.NoUniqueTagException:
                 # System error: no unique id for path/file
@@ -313,13 +331,14 @@ class TagFS(fuse.Fuse):
                     import uuid
                     fuuid = uuid.uuid4().hex
                     try:
-                        self.tagfs.tdb.add_file(fuuid, fname, ftags)
+                        logging.info('add file: '+fname+' '+str(ftags))
+                        self.tagfs.tdb.add_file(fuuid, fname, ftags)                        
                         self.file = os.fdopen(os.open(
                                    self.tagfs.lldir + self.tagfs.tdb.files[fuuid].getfullname(),
                                    flags, *mode), _flags2mode(flags))
                         self.fd = self.file.fileno()                        
-                    except:
-                        logging.error('Want create a file that conflicts with tags')
+                    except TagDB.NoUniqueTagException as ne:
+                        logging.error('Want create a file that conflicts with tags'+ne.msg)
                         e = OSError()
                         e.errno = errno.EEXIST # (TODO: find a correct errno)
                         raise e
@@ -371,6 +390,7 @@ class TagFS(fuse.Fuse):
                 self.tagfs.tdb.store_db(self.tagfs.lldir+'.tagfs_db.meta')
 
         def fgetattr(self):
+            logging.info('fgetattr: '+self.path)
             if self.filetype == 'dir':
                 return self.cur_tagfs.getattr(self.path) 
             return os.fstat(self.fd)
