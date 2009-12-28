@@ -12,6 +12,10 @@ class DBFile:
 
     def getfullname(self):
         return self.fuuid + '_' + self.fname
+    
+    def __str__(self):
+        return 'DBFile(fuuid='+self.fuuid+', fname='+ \
+                self.fname+', tags='+str(self.tags)+')'
 
 class NoTagException(Exception):
     def __init__(self, msg, tags):
@@ -295,6 +299,9 @@ class TagDB:
         self.files = pickle.load(dbf)
         self.tags = pickle.load(dbf)
         dbf.close()
+        self.logger.info('DB loaded:')
+        self.logger.info('files: '+str(self.files))
+        self.logger.info('tags: '+str(self.tags))
     
     def store_db(self, dbfile):
         import pickle
@@ -306,7 +313,7 @@ class TagDB:
     def __rm_ftags(self, fuuid, ftags):
         f = self.files[fuuid]
         for t in ftags:
-            if t != '/':
+            if t != '/' and t in f.tags:
                 f.tags.remove(t)
             del self.tags[t][fuuid]
     
