@@ -7,16 +7,14 @@ def path2tags(path, target):
         return ('dir', ['/'])
     
     tset = path.split('/')
-    if tset[0] == '':
-        if target == 'dir' or target == 'unsure':
-            tset = tset[1:]
-        elif target == 'file' and len(tset) == 2:
-            tset[0] = '/'
-        else: 
-            raise Exception('Invalid target parameter from path2tags: target'
-                            +' = '+target)
+    
+    if target == 'dir' or target == 'unsure':
+        tset = tset[1:]
+    elif target == 'file' and len(tset) == 2:
+        tset[0] = '/'
+
     if tset[-1] == '':
-        tset = tset
+        tset = tset[0:-1]
         return ('dir', tset)
 
     return (target, tset)
