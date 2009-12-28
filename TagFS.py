@@ -130,7 +130,7 @@ class TagFS(fuse.Fuse):
             if fs[0] != 'file':
                 return -errno.ENOENT
             # (TODO: add rm_file_tags_by_path(path, uuid) to TagDB)
-            self.tdb.rm_file_tags_by_path(path, fs[1][0])
+            self.tdb.rm_file_tags_by_path(fs[1][0], path)
             self.tdb.store_db(self.lldir+'.tagfs_db.meta')
         except TagDB.NoTagException:
             return -errno.ENOENT
