@@ -68,10 +68,10 @@ class TagDB:
         for fn in dupnames:
             fids = fnames[fn]
             for fid in fids:
-                unqtags = self.files[fid].tags.copy()
+                unqtags = set(self.files[fid].tags[:])
                 for other_fid in fids:
                     if fid != other_fid:
-                        unqtags -= self.files[other_fid].tags
+                        unqtags -= set(self.files[other_fid].tags)
                 if len(unqtags) == 0:
                     raise NoUniqueTagException('Can not distinguish files: ' \
                                                + str(fids), fids)
@@ -83,13 +83,15 @@ class TagDB:
         fset = None
         for tag in qtags:
             if tag not in self.tags:
+                self.logger.error('query by tags no tag: '+tag)
                 raise NoTagException('Can not find tags ' + tag, tag)
             if fset == None:
                 fset = set(self.tags[tag].keys())
             else:
                 fset &= set(self.tags[tag].keys())
-            if len(fset) == 0:
-                return []
+        if fset == None:
+            self.logger.error('query by tags no tag: '+tag)
+            raise NoTagException('Can not find tags ' + tag, tag)
         return list(fset)
 
     def __query_file(self, qtags):
@@ -106,6 +108,7 @@ class TagDB:
 
     def __query_dir(self, qtags):
         flist = self.__query_by_tags(qtags)
+        self.logger.info('query dir: '+str(qtags)+str(flist))
         flist = self.__make_unique(flist)
         return flist
 
@@ -117,13 +120,15 @@ class TagDB:
             ftags = ['/'] + ftags
         try:
             frs = self.__query_file(ftags)
+            if len(frs) == 0:
+                frs = [] 
         except NoTagException:
-            pass
+            self.logger.info('query both file part no tag: '+str(ftags))
         except NoUniqueTagException:
-            pass
-        if len(frs) == 0:
-            frs = []        
-
+            self.logger.info('query both file part no unique tag: '+str(ftags))
+        
+        self.logger.info('query both file part: '+str(frs)+' for '+str(ftags))
+              
         # query as a directory:
         drs = None
         notagex = None
@@ -131,10 +136,14 @@ class TagDB:
             drs = self.__query_dir(qtags)
         except NoTagException as e:
             # this must be re-raised!
+            self.logger.info('query both dir part no tag: '+str(qtags))
             notagex = e
-        except NoUniqueTagException:
-            pass
+        except NoUniqueTagException as e:
+            self.logger.info('query both dir part no unique tag: '+str(qtags) + ' '+e.msg)
+            
 
+        self.logger.info('query both dir part: '+str(drs)+' for '+str(qtags))
+        
         if frs == None and drs == None:            
             raise notagex
         elif drs == None:
@@ -198,6 +207,7 @@ class TagDB:
             
         elif target == 'unsure':
             rs = self.__query_both(tset)
+            self.logger.info('query both: '+str(rs)+'for '+path)
             if rs[0] == 'no file':
                 raise NoFileException('No such file', path)
             return rs
@@ -327,9 +337,19 @@ class TagDB:
         for t in tset:
             if len(self.tags[t]) == 0:
                 del self.tags[t]
+                
+    def change_file_tags(self, fuuid, rmtags, addtags):
+        self.__rm_ftags(fuuid, rmtags)
+        try:
+            self.add_file_tags(fuuid, addtags)
+        except NoUniqueTagException:
+            self.__undo_rm_ftags(fuuid, rmtags)
+            self.logger.error('change file tags failed rm: '+str(rmtags)+' add: '+str(addtags))
+            raise NoUniqueTagException('change file tags failed rm: '+str(rmtags)+' add: '+str(addtags))
     
     def add_tags_by_path(self, path):
         tset = tagfsutils.path2tags(path, 'dir')[1]
+        self.logger.info('add tags by path: '+str(tset))
         # TODO: check unique for tags!!! IMPORTANT TODO
         for t in tset:
             if t not in self.tags:
