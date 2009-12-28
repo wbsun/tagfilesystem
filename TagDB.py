@@ -246,7 +246,8 @@ class TagDB:
     def add_file_tags(self, fuuid, ftags):
         f = self.files[fuuid]
         if self.check_unique_file(ftags+f.tags, f.fname):
-            f.tags += ftags
+            if ftags[0] != '/':
+                f.tags += ftags
             for t in ftags:
                 if t in self.tags:
                     self.tags[t][fuuid] = f
@@ -307,9 +308,11 @@ class TagDB:
             raise NoUniqueTagException(
                     'Can not make file unique if remove tags. ' \
                     + 'file: ' + fuuid + ' tags: ' + str(tset))
-        if path != '/':
-            if len(f.tags) == 0:
-                self.tags['/'][fuuid] = f
+        #if path != '/':
+            #if len(f.tags) == 0:
+                #self.tags['/'][fuuid] = f
+        if len(f.tags) == 0 and fuuid not in self.tags['/']:
+            del self.files[fuuid]
         
     def rm_tags_by_path(self, path):
         tset = tagfsutils.path2tags(path, 'dir')[1]
