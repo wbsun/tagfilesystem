@@ -68,21 +68,51 @@ class TagDB:
                 fnames[f.fname].append(fid)
                 if len(fnames[f.fname]) == 2:
                     dupnames.append(f.fname)
+                    rs.remove((fnames[f.fname][0],))
             else:
                 fnames[f.fname] = [fid]
                 rs.append((fid,))
 
         for fn in dupnames:
             fids = fnames[fn]
+            
+            # About notagused:
+            #
+            # If there are multiple files, say n, with the same name in the 
+            # current query, ideally we need n different tags to distinguish 
+            # them, in a way that each file has its unique tag attached in its
+            # file name. However, to distinguish them, only n-1 different tags
+            # are enough because one of those files can use its original name
+            # without any unique tag.
+            # This is cool when ls, but not that good when a user wants to open
+            # that file without unique tag because the query will result in
+            # a 'files' result. 
+            # So the file query must be aware of this.
+            # 
+            #                                                  -by Weibin Sun
+            
+            # enable notagused feature:
+            notagused = False
             for fid in fids:
                 unqtags = set(self.files[fid].tags[:])
                 for other_fid in fids:
                     if fid != other_fid:
                         unqtags -= set(self.files[other_fid].tags)
                 if len(unqtags) == 0:
-                    raise NoUniqueTagException('Can not distinguish files: ' \
+                    
+                    # enable notagused feature:
+                    #
+                    if notagused:
+                        raise NoUniqueTagException('Can not distinguish files: ' \
                                                + str(fids), fids)
-                rs.append((fid, unqtags.pop()))  
+                    else:
+                        rs.append((fid, ))
+                        notagused = True
+                    
+                    # raise NoUniqueTagException('Can not distinguish files: ' \
+                    #                           + str(fids), fids)
+                else:
+                    rs.append((fid, unqtags.pop()))  
 
         return rs        
         
@@ -186,9 +216,9 @@ class TagDB:
 
         tset = path.split('/')
         if tset[0] == '':
-            tset = tset[1:]
+            del tset[0]
         if tset[-1] == '':
-            tset = tset[0:-1]
+            del tset[-1]
         if len(tset) == 0:
             tset = ['/']
         
