@@ -22,3 +22,7 @@ To Mount:
 	If you want to monitor the status, use -d option when running TagFs.py
 	to enable debug output.
 	The log is in /tmp/tagfs.log 
+
+Contact:
+	Weibin Sun  wbsun@cs.utah.edu
+	
