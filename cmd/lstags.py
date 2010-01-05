@@ -12,3 +12,5 @@ Features include:
 Implemented:
     1, 3
 """
+
+from tagfs import TagDB
