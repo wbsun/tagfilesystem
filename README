@@ -1,0 +1,24 @@
+
+			Tag File System
+			
+Copyright: never think about that.
+
+Install:
+	This filesystem requires the followings:
+		Python 2.6
+		FUSE-2 library
+		Python-fuse library
+		Better in a Linux box
+	Python version < 2.6 is not supported.
+	Python 3000 is not tested yet. If you insist, try convert the 2.6 code 
+	to 3.0.
+	
+To Mount:
+	Download the sources from GoogleCode trunk.
+	In the up-most dir which contains cmd and tagfs sub-dirs, 
+	run: ./tagfs/TagFS.py -o root=<the back store directory> <mount point>
+	The tagfs will use <the back store directory> to store the meta data and 
+	files. You can do things within <mount point> to have fun.
+	If you want to monitor the status, use -d option when running TagFs.py
+	to enable debug output.
+	The log is in /tmp/tagfs.log 
