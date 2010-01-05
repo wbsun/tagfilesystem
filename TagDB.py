@@ -39,11 +39,8 @@ class NoFileException(Exception):
         self.msg = msg
         self.file = file
 
-
-# for error logger:
-# print traceback
-# import traceback
-# traceback.print_tb()
+# for default tags db file
+DefaultMetaDBFile = '.tagfs_db.meta'
 
 class TagDB:
     
@@ -251,7 +248,7 @@ class TagDB:
         else:
             raise Exception('Invalid parameter: target = '+target)
 
-    def check_unique_filepath(self, filepath):
+    def check_unique_filepath(self, filepath, existed=False):
         """
         Check if a file path is unique. The filepath includes a filename
         and directory structure.
@@ -259,6 +256,22 @@ class TagDB:
         try:
             rs = self.find_by_path(filepath, 'unsure')
             self.logger.info('check unique: '+str(rs)+' '+filepath)
+            if (rs[0] == 'files' or rs[0] == 'file') and existed:
+                return True
+            
+            if not existed:
+                if rs[0] == 'files':
+                    for f in rs[1]:
+                        if len(f) == 1:
+                            return False
+                    return True
+                if rs[0] == 'file':
+                    rspath = '/'
+                    for t in self.files[rs[1][0]].tags:
+                        rspath += t+'/'
+                    rspath += self.files[rs[1][0]].fname
+                    if len(rspath) > len(filepath):
+                        return True
             return False
         except NoTagException:
             return True
@@ -269,7 +282,7 @@ class TagDB:
         except NoFileException:
             return True
 
-    def check_unique_file(self, tags, fname):
+    def check_unique_file(self, tags, fname, existed=False):
         """
         Check if a file with fname as name and 'tags' as all its tags  """
         fpath = '/'
@@ -280,7 +293,7 @@ class TagDB:
             if fpath[-1] != '/':
                 fpath += '/'
         fpath += fname
-        return self.check_unique_filepath(fpath)
+        return self.check_unique_filepath(fpath, existed)
     
     def add_file(self, fuuid, fname, ftags):
         if self.check_unique_file(ftags, fname):
@@ -358,19 +371,23 @@ class TagDB:
             self.tags[t][fuuid] = f
         
     def rm_file_tags_by_path(self, fuuid, path):
-        tset = tagfsutils.path2tags(path, 'dir')[1]
+        tset = tagfsutils.path2tags(path, 'file')[1]
+        del tset[-1]                
         self.__rm_ftags(fuuid, tset)
         f = self.files[fuuid]
-        if not self.check_unique_file(f.tags, f.fname):
-            self.__undo_rm_ftags(fuuid, tset)
+        if not self.check_unique_file(f.tags, f.fname, True):
+            self.logger.error('not unique in rm file tags by path'+str(f.tags))
+            self.__undo_rm_ftags(fuuid, tset)            
             raise NoUniqueTagException(
                     'Can not make file unique if remove tags. ' \
-                    + 'file: ' + fuuid + ' tags: ' + str(tset))
+                    + 'file: ' + fuuid + ' tags: ' + str(tset), tset)
         #if path != '/':
             #if len(f.tags) == 0:
                 #self.tags['/'][fuuid] = f
         if len(f.tags) == 0 and fuuid not in self.tags['/']:
             del self.files[fuuid]
+            return (True, f.getfullname())
+        return (False,)
         
     def rm_tags_by_path(self, path):
         tset = tagfsutils.path2tags(path, 'dir')[1]

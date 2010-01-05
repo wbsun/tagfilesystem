@@ -143,13 +143,16 @@ class TagFS(fuse.Fuse):
                     
             if fs[0] != 'file':
                 return -errno.ENOENT
-                                        
-            # (TODO: add rm_file_tags_by_path(path, uuid) to TagDB)
-            self.tdb.rm_file_tags_by_path(fs[1][0], path)
-            self.tdb.store_db(self.lldir+'.tagfs_db.meta')
-        except TagDB.NoTagException:
+            
+            rt = self.tdb.rm_file_tags_by_path(fs[1][0], path)
+            if rt[0]:
+                os.remove(self.lldir+rt[1])
+            self.tdb.store_db(self.lldir+TagDB.DefaultMetaDBFile)
+        except TagDB.NoTagException as e:
+            logging.error('no tag in unlink'+str(e))
             return -errno.ENOENT
-        except TagDB.NoUniqueTagException:
+        except TagDB.NoUniqueTagException as e:
+            logging.error('no unique in unlink'+str(e))
             return -errno.EISDIR # -errno.ENOENT may be better
         
         # unlink will remove the tags associated with the file, if there is
@@ -163,7 +166,7 @@ class TagFS(fuse.Fuse):
                 return -errno.ENOTEMPTY # not empty
             else:
                 self.tdb.rm_tags_by_path(path)
-                self.tdb.store_db(self.lldir+'.tagfs_db.meta')
+                self.tdb.store_db(self.lldir+TagDB.DefaultMetaDBFile)
         except TagDB.NoTagException:
             return -errno.ENOENT
         except TagDB.NoUniqueTagException:
@@ -205,6 +208,7 @@ class TagFS(fuse.Fuse):
                 addtags = list(set(tags1[0:-1]) - set(tags0[0:-1]))
                 try:
                     self.tdb.change_file_tags(f.fuuid, rmtags, addtags)
+                    self.tdb.store_db(self.lldir+TagDB.DefaultMetaDBFile)
                 except Exception as e:
                     logging.error('change file tag failed from +'+str(addtags)+' -'+str(rmtags))
                     os.rename(self.lldir+f.fuuid+'_'+tags0[-1], self.lldir+f.fuuid+'_'+tags1[-1])
@@ -309,13 +313,13 @@ class TagFS(fuse.Fuse):
         else:
             logging.info('Want to create a dir')
             self.mkdir(path, mode)
-        self.tdb.store_db(self.lldir+'.tagfs_db.meta')
+        self.tdb.store_db(self.lldir+TagDB.DefaultMetaDBFile)
 
 
     def mkdir(self, path, mode):
         logging.info('mkdir: '+path)
         self.tdb.add_tags_by_path(path)
-        self.tdb.store_db(self.lldir+'.tagfs_db.meta')
+        self.tdb.store_db(self.lldir+TagDB.DefaultMetaDBFile)
 
     def utime(self, path, times):
         logging.info('utime: '+path)
@@ -367,8 +371,8 @@ class TagFS(fuse.Fuse):
         self.lldir = self.root
         if self.lldir[-1] != '/':
             self.lldir += '/'
-        if os.path.exists(self.lldir+'.tagfs_db.meta'):
-            self.tdb.load_db(self.lldir+'.tagfs_db.meta')
+        if os.path.exists(self.lldir+TagDB.DefaultMetaDBFile):
+            self.tdb.load_db(self.lldir+TagDB.DefaultMetaDBFile)
         os.chdir(self.root)
 
     class TagFSFile(object):
@@ -465,7 +469,7 @@ class TagFS(fuse.Fuse):
         def release(self, flags):
             self.file.close()
             if self.flags | os.O_CREAT == self.flags:
-                self.tagfs.tdb.store_db(self.tagfs.lldir+'.tagfs_db.meta')
+                self.tagfs.tdb.store_db(self.tagfs.lldir+TagDB.DefaultMetaDBFile)
 
         def _fflush(self):
             self.__fail_dir_ops()   
@@ -485,7 +489,7 @@ class TagFS(fuse.Fuse):
             self._fflush()
             os.close(os.dup(self.fd))
             if self.flags | os.O_CREAT == self.flags:
-                self.tagfs.tdb.store_db(self.tagfs.lldir+'.tagfs_db.meta')
+                self.tagfs.tdb.store_db(self.tagfs.lldir+TagDB.DefaultMetaDBFile)
 
         def fgetattr(self):
             logging.info('fgetattr: '+self.path)
@@ -514,7 +518,7 @@ def main():
     server.multithreaded = False
 
     server.parser.add_option(mountopt="root", metavar="PATH", default='~/',
-            help="mirror filesystem from under PATH [default: %default]")
+            help="back-store of tag filesystem from under PATH [default: %default]")
     server.parse(values=server, errex=1)
 
     try:
