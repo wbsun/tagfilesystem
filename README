@@ -14,9 +14,27 @@ Install:
 	to 3.0.
 	
 To Mount:
+
+	Firstly some issues:
+	Tagfs needs a back-store direcotry to save its meta data and the actual
+	files. Operations under the mounting point directory are actually 
+	translated into tagfs actions and performed in the files under back-store
+	directory.
+	
+	It is better that the back-store directory is empty and if some errors 
+	occur, remove the .tagfs_db.meta file in the back-store.
+	
+	For most file operations, tagfs just mirror the underlying filesystem
+	APIs. The chief difference is the path-lookup which is based on tag query
+	in tagfs. Each directory in a path is considered to be a tag, the order
+	is irrelavent. So 'utah/picture/by-me/' refers to files with tags: picture,
+	utah and by-me.
+	
+	Now the steps:	
 	Download the sources from GoogleCode trunk.
 	In the up-most dir which contains cmd and tagfs sub-dirs, 
 	run: ./tagfs/TagFS.py -o root=<the back store directory> <mount point>
+	
 	The tagfs will use <the back store directory> to store the meta data and 
 	files. You can do things within <mount point> to have fun.
 	If you want to monitor the status, use -d option when running TagFs.py
