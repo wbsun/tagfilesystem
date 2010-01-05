@@ -195,17 +195,25 @@ class TagFS(fuse.Fuse):
             if frs[0] == 'file':
                 logging.info('rename from ' + path + ' to ' + path1)
                 tags0 = tagfsutils.path2tags(path, 'file')[1]
-                tags1 = tagfsutils.path2tags(path, 'file')[1]
+                tags1 = tagfsutils.path2tags(path1, 'file')[1]
                 f = self.tdb.files[frs[1][0]]
                 if tags1[-1] != tags0[-1]:
-                    os.rename(self.lldir+f.getfullname(), self.lldir+f.fuuid+'_'+tags1[-1])
+                    logging.info('rename from '+self.lldir+f.getfullname()+' to '+self.lldir+f.fuuid+'_'+tags1[-1])
+                    os.rename(self.lldir+f.getfullname(), self.lldir+f.fuuid+'_'+tags1[-1])                    
                     f.fname = tags1[-1]
-                rmtags = list(set(tags0) - set(tags1))
-                addtags = list(set(tags1) - set(tags0))
-                self.tdb.change_file_tags(f.fuuid, rmtags, addtags)
+                rmtags = list(set(tags0[0:-1]) - set(tags1[0:-1]))
+                addtags = list(set(tags1[0:-1]) - set(tags0[0:-1]))
+                try:
+                    self.tdb.change_file_tags(f.fuuid, rmtags, addtags)
+                except Exception as e:
+                    logging.error('change file tag failed from +'+str(addtags)+' -'+str(rmtags))
+                    os.rename(self.lldir+f.fuuid+'_'+tags0[-1], self.lldir+f.fuuid+'_'+tags1[-1])
+                    raise e
             else:
+                logging.error('rename fault error')
                 return -errno.EFAULT
-        except:
+        except Exception as e:
+            logging.error('rename error'+str(e))
             return -errno.ENOENT
 
     def link(self, path, path1):

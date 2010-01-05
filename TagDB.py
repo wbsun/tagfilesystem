@@ -379,6 +379,7 @@ class TagDB:
                 del self.tags[t]
                 
     def change_file_tags(self, fuuid, rmtags, addtags):
+        self.logger.info('change_file_tags: +'+str(addtags)+' -'+str(rmtags))
         self.__rm_ftags(fuuid, rmtags)
         try:
             self.add_file_tags(fuuid, addtags)
