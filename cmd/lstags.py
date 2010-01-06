@@ -11,6 +11,7 @@ Features include:
     
 Implemented:
     1, 3
+    
+We use xattr to implement lstags.
 """
-
-from tagfs import TagDB
+import xattr
