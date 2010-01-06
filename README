@@ -40,6 +40,10 @@ To Mount:
 	If you want to monitor the status, use -d option when running TagFs.py
 	to enable debug output.
 	The log is in /tmp/tagfs.log 
+	
+TODO:
+	Command lstags to list all tags of a file and tags in a 'working directory'.
+	Use xattr to implement lstags.
 
 Contact:
 	Weibin Sun  wbsun@cs.utah.edu
