@@ -8,6 +8,7 @@ Install:
 		Python 2.6
 		FUSE-2 library
 		Python-fuse library
+		Python xattr package if you want to use lstags.py command
 		Better in a Linux box
 	Python version < 2.6 is not supported.
 	Python 3000 is not tested yet. If you insist, try convert the 2.6 code 
@@ -16,7 +17,7 @@ Install:
 To Mount:
 
 	Firstly some issues:
-	Tagfs needs a back-store direcotry to save its meta data and the actual
+	Tagfs needs a back-store directory to save its meta data and the actual
 	files. Operations under the mounting point directory are actually 
 	translated into tagfs actions and performed in the files under back-store
 	directory.
@@ -27,7 +28,7 @@ To Mount:
 	For most file operations, tagfs just mirror the underlying filesystem
 	APIs. The chief difference is the path-lookup which is based on tag query
 	in tagfs. Each directory in a path is considered to be a tag, the order
-	is irrelavent. So 'utah/picture/by-me/' refers to files with tags: picture,
+	is irrelevant. So 'utah/picture/by-me/' refers to files with tags: picture,
 	utah and by-me.
 	
 	Now the steps:	
@@ -41,9 +42,17 @@ To Mount:
 	to enable debug output.
 	The log is in /tmp/tagfs.log 
 	
-TODO:
-	Command lstags to list all tags of a file and tags in a 'working directory'.
-	Use xattr to implement lstags.
+Command:
+	cmd/lstags.py:
+		lstags.py <target>
+		if <target> is a file: list all tags of that file, in a path format
+		if <target> is a dir(or we say 'tags' in tagfs): list the union of all 
+			of all tags that are attached by files under <target>, but the 
+			tags in <target> path are not listed. So it looks like 'sub-tags' 
+			under <target>, however, in fact there is not hierarchy relationship 
+			between tags.
+		
+		For convenience, you may want to add the dir containing lstags.py to PATH.
 
 Contact:
 	Weibin Sun  wbsun@cs.utah.edu
