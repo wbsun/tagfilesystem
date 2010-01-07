@@ -285,14 +285,7 @@ class TagDB:
     def check_unique_file(self, tags, fname, existed=False):
         """
         Check if a file with fname as name and 'tags' as all its tags  """
-        fpath = '/'
-        for tag in tags:
-            if tag == '/':
-                continue
-            fpath += tag
-            if fpath[-1] != '/':
-                fpath += '/'
-        fpath += fname
+        fpath = '/'.join(['']+[t for t in tags if t != '/']+[fname])        
         return self.check_unique_filepath(fpath, existed)
     
     def add_file(self, fuuid, fname, ftags):

@@ -2,7 +2,7 @@
 
 def path2tags(path, target):
     if len(path) == 0:
-        return []
+        return (target, [])
     if path == '/':
         return ('dir', ['/'])
     

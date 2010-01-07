@@ -6,7 +6,7 @@
 
 import fuse
 from fuse import Fuse
-from time import time
+#from time import time
 import stat
 import os
 import errno
@@ -104,6 +104,51 @@ class TagFS(fuse.Fuse):
             st.st_mode = llst.st_mode
             st.st_uid = llst.st_uid
         return st
+    
+    
+    def getxattr(self, path, name, size):
+        if name != 'tags':
+            return -errno.ENODATA # should be -errno.ENOATTR
+        tags = ''
+        if path == '/':
+            tags = '/'.join([t for t in self.tdb.tags.keys() if t != '/'])
+        else:
+            try:
+                fs = self.tdb.find_by_path(path, 'unsure')
+                if fs[0] == 'files':
+                    f = tagfsutils.files2file(fs)
+                    if f == None:
+                        logging.error('getxattr get files: '+path)
+                        return -errno.ENOENT
+                    else:
+                        fs = f                
+            except (TagDB.NoTagException, TagDB.NoFileException):
+                logging.error('getxattr: no ent '+path)
+                return -errno.ENOENT
+            
+            if fs[0] == 'dir':
+                if len(fs[1]) != 0:                
+                    pts = set(tagfsutils.path2tags(path, 'dir')[1])
+                    
+                    # make sure lambda be executed at least once and also for first time call                    
+                    ts = reduce(lambda irt,f: irt | set(self.tdb.files[f[0]].tags)-pts, [set()]+fs[1])
+                    tags = '/'.join(ts)                
+            else:
+                f = self.tdb.files[fs[1][0]]
+                tags = '/'.join(f.tags)
+        
+        if size == 0:
+            # tags string size
+            return len(tags)
+        return tags
+    
+    def setxattr(self, path, name, value):
+        # set tags should be done by unlink/mknod/open
+        return -errno.ENOSYS
+
+    def listxattr(self, path, size):        
+        # we have only one extended attribute
+        return self.getxattr(path, 'tags', size)
 
     def readlink(self, path):
         # link is not supported
