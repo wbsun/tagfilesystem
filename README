@@ -3,6 +3,10 @@
 			
 Copyright: never think about that.
 
+Bugfix:
+	When creating new file, '/' will be a tag in file.
+	TagDB.add_file_tags can not deal with [] tags.
+
 Install:
 	This filesystem requires the followings:
 		Python 2.6
