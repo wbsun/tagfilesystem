@@ -290,7 +290,10 @@ class TagDB:
     
     def add_file(self, fuuid, fname, ftags):
         if self.check_unique_file(ftags, fname):
-            f = DBFile(fuuid, fname, ftags[:])                        
+            newftags = ftags[:]
+            if '/' in newftags:
+                newftags = newftags[1:]
+            f = DBFile(fuuid, fname, newftags)                        
             self.files[fuuid] = f
             if len(ftags) == 0:
                 ftags += ['/']
