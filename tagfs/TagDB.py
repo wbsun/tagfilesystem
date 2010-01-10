@@ -309,7 +309,10 @@ class TagDB:
 
     def add_file_tags(self, fuuid, ftags):
         f = self.files[fuuid]
-        if self.check_unique_file(ftags+f.tags, f.fname):
+        existed = False
+        if len(ftags) == 0:
+            existed = True
+        if self.check_unique_file(ftags+f.tags, f.fname, existed):
             for t in ftags:
                 if t != '/' and t not in f.tags:
                     f.tags.append(t)
