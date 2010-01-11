@@ -143,8 +143,18 @@ class TagFS(fuse.Fuse):
         return tags
     
     def setxattr(self, path, name, value):
-        # set tags should be done by unlink/mknod/open
-        return -errno.ENOSYS
+        # if name != 'tags':
+        #    return -errno.ENODATA # should be -errno.ENOATTR 
+        try:
+            fs = self.tdb.find_by_path(path, 'unsure')
+            if fs[0] == 'files':
+                f = tagfsutils.files2file(fs)
+                if f == None:
+                    logging.error('getxattr get files: '+path)
+                    return -errno.ENOENT                             
+        except (TagDB.NoTagException, TagDB.NoFileException):
+            logging.error('setxattr: no ent '+path)
+            return -errno.ENOENT       
 
     def listxattr(self, path, size):        
         # we have only one extended attribute
