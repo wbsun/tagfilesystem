@@ -46,50 +46,52 @@ class TagfsStat(fuse.Stat):
 
 class TagFS(fuse.Fuse):
     
+    # because of single threading, we could use this static var to access the only
+    # TagFS object.
     cur_tagfs = None
     
-    def __init__(self, *args, **kw):
-        global g_cur_tagfs
+    def __init__(self, *args, **kw):        
         Fuse.__init__(self, *args, **kw)
         self.tdb = TagDB.TagDB(logging)
         #tdb.loaddb(None)
-        self.lldir = "." # TODO: set low level directory
+        self.lldir = "." 
         TagFS.cur_tagfs = self
         self.root = "."
+        
+    def find_nonfiles_by_path(self, path, target='unsure'):
+        fs = self.tdb.find_by_path(path, target)
+        if fs[0] == 'files':
+            f = tagfsutils.files2file(fs)
+            if f == None:
+                import inspect
+                funcname = inspect.currentframe().f_back.f_code.co_name
+                logging.error(funcname+' get files: '+path)
+                raise TagDB.NoTagException(funcname+' not tag'+path, path)
+            else:
+                fs = f
+        return fs
         
     def getattr(self, path):
         logging.info('getattr: '+path)
         st = TagfsStat()
         try:
-            fs = self.tdb.find_by_path(path, 'unsure')
-            if fs[0] == 'files':
-                f = tagfsutils.files2file(fs)
-                if f == None:
-                    logging.error('getattr get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    fs = f
-            #if fs[0] == 'no such file':
-            #    logging.error('getattr: no ent '+path)
-            #    return -errno.ENOENT
+            fs = self.find_nonfiles_by_path(path)
         except (TagDB.NoTagException, TagDB.NoFileException):
             logging.error('getattr: no ent '+path)
-            return -errno.ENOENT
-
-        st.st_size = 4096L
-        st.st_nlink = 2
-        st.st_ino = 0L
-        st.st_dev = 0L
-        st.st_gid = 0
-        st.st_atime = 0
-        st.st_mtime = 0
-        st.st_ctime = 0
-        st.st_uid = 0
+            return -errno.ENOENT        
             
         if fs[0] == 'dir':
             # directory
             st.st_mode = stat.S_IFDIR | 0777
-            
+            st.st_size = 4096L
+            st.st_nlink = 2
+            st.st_ino = 0L
+            st.st_dev = 0L
+            st.st_gid = 0
+            st.st_atime = 0
+            st.st_mtime = 0
+            st.st_ctime = 0
+            st.st_uid = 0            
         else:
             # file
             llst = os.lstat(self.lldir + self.tdb.files[fs[1][0]].getfullname())
@@ -114,14 +116,15 @@ class TagFS(fuse.Fuse):
             tags = '/'.join([t for t in self.tdb.tags.keys() if t != '/'])
         else:
             try:
-                fs = self.tdb.find_by_path(path, 'unsure')
-                if fs[0] == 'files':
-                    f = tagfsutils.files2file(fs)
-                    if f == None:
-                        logging.error('getxattr get files: '+path)
-                        return -errno.ENOENT
-                    else:
-                        fs = f                
+                fs = self.find_nonfiles_by_path(path)
+#                fs = self.tdb.find_by_path(path, 'unsure')
+#                if fs[0] == 'files':
+#                    f = tagfsutils.files2file(fs)
+#                    if f == None:
+#                        logging.error('getxattr get files: '+path)
+#                        return -errno.ENOENT
+#                    else:
+#                        fs = f                
             except (TagDB.NoTagException, TagDB.NoFileException):
                 logging.error('getxattr: no ent '+path)
                 return -errno.ENOENT
@@ -146,12 +149,7 @@ class TagFS(fuse.Fuse):
         # if name != 'tags':
         #    return -errno.ENODATA # should be -errno.ENOATTR 
         try:
-            fs = self.tdb.find_by_path(path, 'unsure')
-            if fs[0] == 'files':
-                f = tagfsutils.files2file(fs)
-                if f == None:
-                    logging.error('getxattr get files: '+path)
-                    return -errno.ENOENT                             
+            self.find_nonfiles_by_path(path)                           
         except (TagDB.NoTagException, TagDB.NoFileException):
             logging.error('setxattr: no ent '+path)
             return -errno.ENOENT       
@@ -167,7 +165,7 @@ class TagFS(fuse.Fuse):
 
     def readdir(self, path, offset):
         logging.info('readdir: '+path)
-        try:
+        try:            
             fs = self.tdb.find_by_path(path, 'dir')
             if fs[0] == 'file':
                 yield -errno.ENOTDIR
@@ -188,13 +186,7 @@ class TagFS(fuse.Fuse):
     def unlink(self, path):
         logging.info('unlink: '+path)
         try:
-            fs = self.tdb.find_by_path(path, 'file')
-            if fs[0] == 'files':
-                f = tagfsutils.files2file(fs)
-                if f == None:
-                    return -errno.ENOENT
-                else:
-                    fs = f
+            fs = self.find_nonfiles_by_path(path, 'file')            
                     
             if fs[0] != 'file':
                 return -errno.ENOENT
@@ -234,19 +226,10 @@ class TagFS(fuse.Fuse):
         return -errno.ENOSYS
 
     def rename(self, path, path1):
-        logging.info('rename: '+path)
-        # not support yet
-        # self.tdb.store_db(self.lldir+'.tagfs_db.meta')
+        logging.info('rename: '+path)        
         try:
-            frs = self.tdb.find_by_path(path, 'file') # 'unsure'
-            if frs[0] == 'files':
-                f = tagfsutils.files2file(frs)
-                if f == None:
-                    logging.error('get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    frs = f
-            elif frs[0] == 'dir':
+            frs = self.find_nonfiles_by_path(path, 'file')
+            if frs[0] == 'dir':
                 logging.error('rename on dir is not supported yet: '+path+' to '+path1)
                 return -errno.ENOSYS
             
@@ -283,15 +266,8 @@ class TagFS(fuse.Fuse):
     def chmod(self, path, mode):
         logging.info('chmod: '+path)
         try:
-            frs = self.tdb.find_by_path(path, 'unsure')
-            if frs[0] == 'files':
-                f = tagfsutils.files2file(frs)
-                if f == None:
-                    logging.error('chmod get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    frs = f
-            elif frs[0] == 'dir':
+            frs = self.find_nonfiles_by_path(path)
+            if frs[0] == 'dir':
                 logging.info('chmod on dir makes no sense')
                 return 0
             
@@ -305,15 +281,8 @@ class TagFS(fuse.Fuse):
     def chown(self, path, user, group):
         logging.info('chown: '+path)
         try:
-            frs = self.tdb.find_by_path(path, 'unsure')
-            if frs[0] == 'files':
-                f = tagfsutils.files2file(frs)
-                if f == None:
-                    logging.error('chown get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    frs = f
-            elif frs[0] == 'dir':
+            frs = self.find_nonfiles_by_path(path)
+            if frs[0] == 'dir':
                 logging.info('chown on dir makes no sense')
                 return 0
             
@@ -327,15 +296,8 @@ class TagFS(fuse.Fuse):
     def truncate(self, path, len):
         logging.info('truncate: '+path)
         try:
-            frs = self.tdb.find_by_path(path, 'unsure')
-            if frs[0] == 'files':
-                f = tagfsutils.files2file(frs)
-                if f == None:
-                    logging.error('truncate get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    frs = f
-            elif frs[0] == 'dir':
+            frs = self.find_nonfiles_by_path(path)
+            if frs[0] == 'dir':
                 logging.info('truncate on dir')
                 return -errno.EISDIR
             
@@ -379,15 +341,8 @@ class TagFS(fuse.Fuse):
     def utime(self, path, times):
         logging.info('utime: '+path)
         try:
-            frs = self.tdb.find_by_path(path, 'unsure')
-            if frs[0] == 'files':
-                f = tagfsutils.files2file(frs)
-                if f == None:
-                    logging.error('utime get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    frs = f                
-            elif frs[0] == 'dir':
+            frs = self.find_nonfiles_by_path(path)              
+            if frs[0] == 'dir':
                 logging.info('utime on dir makes no sense')
                 return 0
             
@@ -402,15 +357,8 @@ class TagFS(fuse.Fuse):
     def access(self, path, mode):
         logging.info('access: '+path)
         try:
-            frs = self.tdb.find_by_path(path, 'unsure')
-            if frs[0] == 'files':
-                f = tagfsutils.files2file(frs)
-                if f == None:
-                    logging.error('access get files: '+path)
-                    return -errno.ENOENT
-                else:
-                    frs = f   
-            elif frs[0] == 'dir':
+            frs = self.find_nonfiles_by_path(path)
+            if frs[0] == 'dir':
                 return 0
             
             if frs[0] == 'file':
@@ -441,18 +389,9 @@ class TagFS(fuse.Fuse):
             self.direct_io = True
             self.keep_cache = False
             try:
-                # can a directory be opened? Yes, but when reading, errors are there.
-                f = self.tagfs.tdb.find_by_path(path, 'unsure')
-                if f[0] == 'files':
-                    fr = tagfsutils.files2file(f)
-                    if fr == None:
-                        logging.error('open get files: '+path)
-                        e = OSError()
-                        e.errno = errno.ENOENT
-                        raise e
-                    else:
-                        f = fr                    
-                elif f[0] == 'dir':
+                # can a directory be opened? Yes, but when reading, errors are there.                
+                f = self.tagfs.find_nonfiles_by_path(path)                
+                if f[0] == 'dir':
                     self.filetype = 'dir'                    
                     self.dircont = f[1]
                 
