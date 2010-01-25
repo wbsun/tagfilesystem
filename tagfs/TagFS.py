@@ -116,15 +116,7 @@ class TagFS(fuse.Fuse):
             tags = '/'.join([t for t in self.tdb.tags.keys() if t != '/'])
         else:
             try:
-                fs = self.find_nonfiles_by_path(path)
-#                fs = self.tdb.find_by_path(path, 'unsure')
-#                if fs[0] == 'files':
-#                    f = tagfsutils.files2file(fs)
-#                    if f == None:
-#                        logging.error('getxattr get files: '+path)
-#                        return -errno.ENOENT
-#                    else:
-#                        fs = f                
+                fs = self.find_nonfiles_by_path(path)               
             except (TagDB.NoTagException, TagDB.NoFileException):
                 logging.error('getxattr: no ent '+path)
                 return -errno.ENOENT
@@ -182,6 +174,14 @@ class TagFS(fuse.Fuse):
                 yield fuse.Direntry(self.tdb.files[f[0]].fname)
             else:
                 yield fuse.Direntry(f[1] + '/' + self.tdb.files[f[0]].fname)
+                
+        subtags = self.getxattr(path, 'tags', 1)
+        if len(subtags) != 0:
+            subtags = subtags.split('/')
+            for st in subtags:
+                if len(st) != 0:
+                    yield fuse.Direntry(st)
+                 
 
     def unlink(self, path):
         logging.info('unlink: '+path)
