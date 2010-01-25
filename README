@@ -6,6 +6,8 @@ Copyright: never think about that.
 Bugfix:
 	When creating new file, '/' will be a tag in file.
 	TagDB.add_file_tags can not deal with [] tags.
+	
+	Readdir support sub-tags. So that 'ls' can list directories.
 
 Install:
 	This filesystem requires the followings:
