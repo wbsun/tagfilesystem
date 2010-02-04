@@ -82,16 +82,18 @@ class TagFS(fuse.Fuse):
             
         if fs[0] == 'dir':
             # directory
-            st.st_mode = stat.S_IFDIR | 0777
+            st.st_mode = stat.S_IFDIR | 0755
             st.st_size = 4096L
             st.st_nlink = 2
             st.st_ino = 0L
             st.st_dev = 0L
-            st.st_gid = 0
+            st.st_gid = os.getgid()
+            
+            # TODO: add a/m/c times for tags. Dir times will be the most recent one.
             st.st_atime = 0
             st.st_mtime = 0
             st.st_ctime = 0
-            st.st_uid = 0            
+            st.st_uid = os.getuid()            
         else:
             # file
             llst = os.lstat(self.lldir + self.tdb.files[fs[1][0]].getfullname())
