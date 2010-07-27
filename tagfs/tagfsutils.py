@@ -24,7 +24,7 @@ def path2tags(path, target):
 
 def files2file(fs):
     if fs[0] != 'files':
-        raise Exception('invalid arguments, a files result is expected.')
+        raise Exception('invalid arguments, a files-result is expected.')
     for f in fs[1]:
         if len(f) == 1:
             fs = ('file', f)
